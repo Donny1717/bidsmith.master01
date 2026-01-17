@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # BidSmith - Premium AI-Powered Proposal Generator
 
 **BidSmith** is a sophisticated expert system designed to generate winning proposals for UK construction and NHS tenders in London.
@@ -57,3 +58,7 @@ See `/docs` for detailed documentation on:
 ## ⚖️ License
 
 MIT
+=======
+# bidsmith.master01
+BidSmith AI 
+>>>>>>> 11f85c312f7406215a952de24dd10215a4130e26
