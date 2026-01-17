@@ -1,0 +1,40 @@
+{
+  "name": "bidsmith",
+  "version": "1.0.0",
+  "description": "Premium AI-powered proposal generation system for UK construction and NHS tenders",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test",
+    "lint": "eslint src/**/*.js"
+  },
+  "keywords": [
+    "tender",
+    "proposal",
+    "construction",
+    "NHS",
+    "CDM2015",
+    "UK",
+    "London"
+  ],
+  "author": "BidSmith",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "openai": "^4.20.1",
+    "pdf-lib": "^1.17.1",
+    "mammoth": "^1.6.0",
+    "js-yaml": "^4.1.0",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.54.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
