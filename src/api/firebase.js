@@ -1,50 +1,39 @@
-const { admin, getDb, initFirebaseAdmin } = require('./firebaseAdmin');
+const admin = require('firebase-admin');
 
-async function updateSubscriptionStatus(userId, subscriptionData) {
-  try {
-    initFirebaseAdmin();
-    const userRef = getDb().collection('users').doc(userId);
-
-    await userRef.set(
-      {
-        subscription: subscriptionData,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      },
-      { merge: true }
-    );
-
-    console.log('✅ Subscription updated:', userId);
-  } catch (error) {
-    console.error('❌ Subscription update error:', error);
-    throw error;
+function initFirebaseAdmin() {
+  if (admin.apps.length) {
+    return admin.app();
   }
+
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+  if (!projectId || !clientEmail || !privateKey) {
+    console.warn(
+      'Firebase Admin not initialized: missing FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, or FIREBASE_PRIVATE_KEY (must be single line with \\n escapes).'
+    );
+    return null;
+  }
+
+  return admin.initializeApp({
+    credential: admin.credential.cert({
+      projectId,
+      clientEmail,
+      privateKey: privateKey.replace(/\\n/g, '\n')
+    })
+  });
 }
 
-/**
- * Get user by email
- */
-async function getUserByEmail(email) {
-  try {
-    initFirebaseAdmin();
-    const snapshot = await getDb()
-      .collection('users')
-      .where('email', '==', email)
-      .limit(1)
-      .get();
-
-    if (snapshot.empty) return null;
-
-    const doc = snapshot.docs[0];
-    return { id: doc.id, ...doc.data() };
-  } catch (error) {
-    console.error('❌ Get user error:', error);
-    throw error;
-  }
+function getDb() {
+  const app = initFirebaseAdmin();
+  if (!app) return null;
+  return admin.firestore(app);
 }
 
 module.exports = {
-  updateSubscriptionStatus,
-  getUserByEmail,
-  db: getDb(),
-  admin
+  admin,
+  initFirebaseAdmin,
+  getDb
 };
+

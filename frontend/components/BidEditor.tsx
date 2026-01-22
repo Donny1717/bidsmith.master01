@@ -1,33 +1,30 @@
 "use client";
 
-import { useState } from "react";
+export default function DeleteButton() {
+  const handleDelete = async () => {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/api/proposals/123`,
+      {
+        method: "DELETE",
+      }
+    );
 
-interface Props {
-  initialContent?: string;
-  onChange?: (value: string) => void;
-}
-
-export default function BidEditor({ initialContent = "", onChange }: Props) {
-  const [value, setValue] = useState(initialContent);
-
-  const handleChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const next = event.target.value;
-    setValue(next);
-    onChange?.(next);
+    const data = await res.json();
+    console.log("DELETE RESULT:", data);
+    alert("Deleted proposal " + data.id);
   };
 
   return (
-    <div className="flex flex-col gap-2">
-      <label className="text-sm font-semibold text-neutral-800">Bid response</label>
-      <textarea
-        value={value}
-        onChange={handleChange}
-        className="min-h-[240px] rounded border border-neutral-300 p-3 text-sm"
-        placeholder="Draft your response..."
-      />
-      <div className="text-xs text-neutral-500">
-        Tip: include London-specific commitments (CLP, NRMM/ULEZ, Section 106, social value).
-      </div>
-    </div>
+    <button
+      onClick={handleDelete}
+      style={{
+        padding: "10px 16px",
+        background: "red",
+        color: "white",
+        borderRadius: "6px",
+      }}
+    >
+      Delete Proposal
+    </button>
   );
 }

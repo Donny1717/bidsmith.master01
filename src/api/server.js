@@ -1,555 +1,185 @@
-const express = require('express');
-const cors = require('cors');
-const multer = require('multer');
-const dotenv = require('dotenv');
+/**
+ * BidSmith ASF - Stripe Payment Integration
+ * Production-ready payment processing for £1,490
+ */
 
-dotenv.config({ path: '.env.local' });
+const Stripe = require('stripe');
 
-const { createCheckoutSession, verifyCheckoutSession, handleWebhook, getPaymentDetails } = require('./stripe');
+const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_BIDSMITH_FULL;
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
+const stripeClient = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
-const { saveSignature, getSignature, deleteSignature } = require('./signature');
-const { initFirebaseAdmin } = require('./firebaseAdmin');
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-// CORS
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-    credentials: true
-  })
-);
-
-// File upload configuration
-const storage = multer.memoryStorage();
-const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 50 * 1024 * 1024 // 50MB for tender documents
-  },
-  fileFilter: (req, file, cb) => {
-    const allowedMimes = [
-      'application/pdf',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/msword',
-      'image/png',
-      'image/jpeg'
-    ];
-
-    if (allowedMimes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only PDF, DOCX, PNG, JPG allowed.'));
-    }
+function assertStripeConfigured() {
+  if (!stripeClient) {
+    throw new Error('Stripe is not configured. Set STRIPE_SECRET_KEY in .env.local');
   }
-});
+}
 
-// ==========================================
-// STRIPE WEBHOOK (MUST BE BEFORE express.json)
-// ==========================================
-app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  try {
-    const result = await handleWebhook(req);
-    res.status(200).json(result);
-  } catch (error) {
-    console.error('❌ Webhook error:', error.message);
-    res.status(400).json({ error: error.message });
-  }
-});
+function getSuccessUrl() {
+  const base = process.env.FRONTEND_URL || 'http://localhost:3001';
+  return `${base}/payment/success`;
+}
 
-// JSON body parser for other routes
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// ==========================================
-// HEALTH CHECK
-// ==========================================
-app.get('/api/health', (req, res) => {
-  let firebaseOk = false;
-  let firebaseMessage = 'Not configured';
-
-  try {
-    initFirebaseAdmin();
-    firebaseOk = true;
-    firebaseMessage = 'Firebase Admin initialized';
-  } catch (err) {
-    firebaseMessage = err.message;
-  }
-
-  const openaiOk = !!process.env.OPENAI_API_KEY;
-  const status = firebaseOk && openaiOk ? 'ok' : 'degraded';
-
-  res.json({
-    status,
-    checks: {
-      firebaseAdmin: { ok: firebaseOk, message: firebaseMessage },
-      openai: { ok: openaiOk, message: openaiOk ? 'OpenAI key present' : 'OpenAI key missing' }
-    },
-    timestamp: new Date().toISOString()
-  });
-});
-
-// ==========================================
-// TENDER UPLOAD & ANALYSIS
-// ==========================================
+function getCancelUrl() {
+  const base = process.env.FRONTEND_URL || 'http://localhost:3001';
+  return `${base}/payment/cancel`;
+}
 
 /**
- * Upload tender documents
- * POST /api/upload
- * Files: tender PDFs/Word docs
- * Body: companyName, companyNumber, projects[], accreditations[]
+ * Create Stripe Checkout Session for £1,490
  */
-app.post('/api/upload', upload.array('files', 10), async (req, res) => {
-  try {
-    const files = req.files;
-    const companyDetails = req.body;
+async function createCheckoutSession({ userId, userEmail, bidId }) {
+  assertStripeConfigured();
 
-    if (!files || files.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'No files uploaded'
-      });
-    }
-
-    console.log(`📤 Uploaded ${files.length} files`);
-    console.log('Company:', companyDetails.companyName);
-
-    // Generate analysis ID
-    const analysisId = `analysis_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    // TODO: Process PDFs with pdf-parse
-    // TODO: Extract questions and criteria
-    // TODO: Store in Firestore
-
-    res.json({
-      success: true,
-      message: 'Files uploaded successfully',
-      analysisId,
-      fileCount: files.length,
-      files: files.map(f => ({
-        name: f.originalname,
-        size: f.size,
-        type: f.mimetype
-      }))
-    });
-  } catch (error) {
-    console.error('❌ Upload error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+  if (!STRIPE_PRICE_ID) {
+    throw new Error('STRIPE_PRICE_ID not configured');
   }
-});
 
-/**
- * Analyze tender documents
- * POST /api/analyze
- * Body: { analysisId }
- */
-app.post('/api/analyze', async (req, res) => {
   try {
-    const { analysisId } = req.body;
-
-    if (!analysisId) {
-      return res.status(400).json({
-        success: false,
-        error: 'analysisId is required'
-      });
-    }
-
-    console.log(`🔍 Analyzing tender: ${analysisId}`);
-
-    // TODO: Use OpenAI to analyze tender
-    // TODO: Extract London-specific requirements
-    // TODO: Calculate compliance score
-
-    // Mock response for now
-    res.json({
-      success: true,
-      analysisId,
-      tender: {
-        title: 'Westminster Council Road Improvement',
-        deadline: '2026-02-15T12:00:00Z',
-        value: 850000
-      },
-      questions: 18,
-      wordLimit: 12500,
-      complianceScore: 87,
-      londonRequirements: [
-        { name: 'Construction Logistics Plan', required: true, present: true },
-        { name: 'NRMM/ULEZ Compliance', required: true, present: true },
-        { name: 'Section 106 Social Value', required: true, present: true, minScore: 25 },
-        { name: 'Net Zero Commitment', required: true, present: true, target: 2030 },
-        { name: 'Traffic Management Plan', required: true, present: false }
+    const session = await stripeClient.checkout.sessions.create({
+      mode: 'payment',
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price: STRIPE_PRICE_ID,
+          quantity: 1,
+        },
       ],
-      questionList: [
-        { id: 'q1', title: 'Methodology & Approach', wordLimit: 1500, marks: 20, status: 'pending' },
-        { id: 'q2', title: 'Risk Management', wordLimit: 1000, marks: 15, status: 'pending' },
-        { id: 'q3', title: 'Social Value Plan', wordLimit: 2000, marks: 25, status: 'pending' },
-        { id: 'q4', title: 'Health & Safety', wordLimit: 1500, marks: 15, status: 'pending' },
-        { id: 'q5', title: 'Quality Management', wordLimit: 1000, marks: 10, status: 'pending' }
-      ]
+      success_url: getSuccessUrl() + `?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: getCancelUrl(),
+      client_reference_id: userId,
+      customer_email: userEmail,
+      metadata: {
+        userId,
+        bidId,
+        product: 'BidSmith ASF Full Access',
+        purchaseDate: new Date().toISOString(),
+      },
+      allow_promotion_codes: true,
     });
+
+    console.log('✅ Checkout session created:', session.id);
+
+    return {
+      sessionId: session.id,
+      url: session.url,
+    };
   } catch (error) {
-    console.error('❌ Analysis error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    console.error('❌ Stripe checkout error:', error);
+    throw new Error(`Failed to create checkout: ${error.message}`);
   }
-});
+}
 
 /**
- * Generate bid response using OpenAI
- * POST /api/generate
- * Body: { analysisId, questionId, companyDetails, previousProjects }
+ * Verify checkout session
  */
-app.post('/api/generate', async (req, res) => {
+async function verifyCheckoutSession(sessionId) {
+  assertStripeConfigured();
+
   try {
-    const { analysisId, questionId, companyDetails } = req.body;
+    const session = await stripeClient.checkout.sessions.retrieve(sessionId);
 
-    if (!analysisId || !questionId) {
-      return res.status(400).json({
-        success: false,
-        error: 'analysisId and questionId are required'
-      });
-    }
-
-    console.log(`🤖 Generating response for ${questionId}`);
-
-    // TODO: Call OpenAI with London-specific prompts
-    // TODO: Include Social Value Model requirements
-    // TODO: Generate 6-part structure
-
-    // Mock response
-    res.json({
-      success: true,
-      questionId,
-      content: `## Executive Summary
-
-Our approach to ${questionId} combines proven methodologies with London-specific compliance requirements.
-
-## Methodology
-
-1. **Planning Phase**
-   - Construction Logistics Plan aligned with TfL requirements
-   - NRMM Stage V compliance for all equipment
-   - ULEZ-compliant vehicle fleet
-
-2. **Execution Phase**
-   - 8 apprenticeships (exceeds 5 minimum requirement)
-   - 60% workforce from Westminster
-   - £170,000 to local SMEs (20% of contract value)
-
-## Evidence
-
-Previous projects:
-- Westminster Bridge Refurbishment (2024) - £2.1M
-- Camden Street Improvement (2023) - £1.5M
-
-## Risk Management
-
-| Risk | Mitigation | Owner |
-|------|-----------|-------|
-| Traffic disruption | Off-peak working hours | Site Manager |
-| Weather delays | Buffer time in programme | Project Director |
-
-## KPIs
-
-- Zero RIDDOR incidents
-- 95% local employment target
-- Net Zero carbon by 2030
-
-## Compliance
-
-✓ Section 106 obligations met (25+ points)
-✓ ISO 9001, 14001, 45001 certified
-✓ Constructionline Gold member`,
-      wordCount: 247,
-      coverageScore: 92,
-      sections: {
-        summary: true,
-        approach: true,
-        evidence: true,
-        risks: true,
-        kpis: true,
-        compliance: true
-      }
-    });
-  } catch (error) {
-    console.error('❌ Generation error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// ==========================================
-// ELECTRONIC SIGNATURE
-// ==========================================
-
-/**
- * Save signature (canvas drawing or uploaded image)
- * POST /api/signature
- * Body: { userId, bidId, signatureData (base64), signatoryName, signatoryPosition }
- */
-app.post('/api/signature', async (req, res) => {
-  try {
-    const { userId, bidId, signatureData, signatoryName, signatoryPosition } = req.body;
-
-    if (!userId || !bidId || !signatureData || !signatoryName) {
-      return res.status(400).json({
-        success: false,
-        error: 'userId, bidId, signatureData, and signatoryName are required'
-      });
-    }
-
-    const signature = await saveSignature({
-      userId,
-      bidId,
-      signatureData, // base64 PNG
-      signatoryName,
-      signatoryPosition: signatoryPosition || 'Director',
-      timestamp: new Date().toISOString(),
-      ipAddress: req.ip,
-      userAgent: req.headers['user-agent']
-    });
-
-    res.json({
-      success: true,
-      signatureId: signature.id,
-      message: 'Signature saved successfully',
-      auditTrail: {
-        timestamp: signature.timestamp,
-        signatory: signature.signatoryName,
-        ipAddress: signature.ipAddress
-      }
-    });
-  } catch (error) {
-    console.error('❌ Signature error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-/**
- * Get signature
- * GET /api/signature/:bidId
- */
-app.get('/api/signature/:bidId', async (req, res) => {
-  try {
-    const { bidId } = req.params;
-    const signature = await getSignature(bidId);
-
-    if (!signature) {
-      return res.status(404).json({
-        success: false,
-        error: 'Signature not found'
-      });
-    }
-
-    res.json({
-      success: true,
-      signature
-    });
-  } catch (error) {
-    console.error('❌ Get signature error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-/**
- * Delete signature
- * DELETE /api/signature/:bidId
- */
-app.delete('/api/signature/:bidId', async (req, res) => {
-  try {
-    const { bidId } = req.params;
-    await deleteSignature(bidId);
-
-    res.json({
-      success: true,
-      message: 'Signature deleted'
-    });
-  } catch (error) {
-    console.error('❌ Delete signature error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// ==========================================
-// STRIPE PAYMENT
-// ==========================================
-
-/**
- * Create Stripe Checkout Session
- * POST /api/stripe/checkout
- * Body: { userId, userEmail, bidId }
- */
-app.post('/api/stripe/checkout', async (req, res) => {
-  try {
-    const { userId, userEmail, bidId } = req.body;
-
-    if (!userId || !userEmail) {
-      return res.status(400).json({
-        success: false,
-        error: 'userId and userEmail are required'
-      });
-    }
-
-    const session = await createCheckoutSession({
-      userId,
-      userEmail,
-      bidId: bidId || 'no_bid_yet'
-    });
-
-    res.json({
-      success: true,
-      sessionId: session.sessionId,
-      url: session.url // Redirect user here
-    });
-  } catch (error) {
-    console.error('❌ Checkout error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-/**
- * Verify payment after Stripe redirect
- * GET /api/stripe/verify/:sessionId
- */
-app.get('/api/stripe/verify/:sessionId', async (req, res) => {
-  try {
-    const { sessionId } = req.params;
-    const payment = await verifyCheckoutSession(sessionId);
-
-    res.json({
-      success: true,
-      payment
-    });
+    return {
+      id: session.id,
+      paymentStatus: session.payment_status,
+      customerEmail: session.customer_email,
+      amountTotal: session.amount_total / 100,
+      currency: session.currency.toUpperCase(),
+      metadata: session.metadata,
+      isSuccessful: session.payment_status === 'paid',
+    };
   } catch (error) {
     console.error('❌ Verification error:', error);
-    res.status(400).json({
-      success: false,
-      error: error.message
-    });
+    throw new Error('Invalid session ID');
   }
-});
+}
 
 /**
- * Get payment receipt/details
- * GET /api/payment/:sessionId
+ * Handle Stripe webhooks
  */
-app.get('/api/payment/:sessionId', async (req, res) => {
-  try {
-    const { sessionId } = req.params;
-    const payment = await getPaymentDetails(sessionId);
+async function handleWebhook(req) {
+  assertStripeConfigured();
 
-    res.json({
-      success: true,
-      payment
-    });
-  } catch (error) {
-    console.error('❌ Payment retrieval error:', error);
-    res.status(404).json({
-      success: false,
-      error: 'Payment not found'
-    });
+  const sig = req.headers['stripe-signature'];
+
+  if (!sig) {
+    throw new Error('Missing stripe-signature header');
   }
-});
 
-// ==========================================
-// PDF GENERATION & DOWNLOAD
-// ==========================================
+  let event;
 
-/**
- * Generate final bid PDF with signature
- * POST /api/pdf/generate
- * Body: { bidId, userId }
- */
-app.post('/api/pdf/generate', async (req, res) => {
   try {
-    const { bidId, userId } = req.body;
-
-    if (!bidId || !userId) {
-      return res.status(400).json({
-        success: false,
-        error: 'bidId and userId are required'
-      });
-    }
-
-    console.log(`📄 Generating PDF for bid: ${bidId}`);
-
-    // TODO: Fetch bid content from Firestore
-    // TODO: Fetch signature
-    // TODO: Generate PDF with puppeteer
-    // TODO: Upload to Firebase Storage
-    // TODO: Return download URL
-
-    res.json({
-      success: true,
-      pdfUrl: `https://storage.googleapis.com/bidsmith/${bidId}.pdf`,
-      fileName: `BidSmith_${bidId}.pdf`,
-      size: '8.4 MB'
-    });
-  } catch (error) {
-    console.error('❌ PDF generation error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    event = stripeClient.webhooks.constructEvent(
+      req.body,
+      sig,
+      STRIPE_WEBHOOK_SECRET
+    );
+  } catch (err) {
+    console.error('⚠️ Webhook signature failed:', err.message);
+    throw new Error('Invalid webhook signature');
   }
-});
 
-// Error handling middleware
-app.use((error, req, res, next) => {
-  console.error('❌ Server error:', error);
-  res.status(500).json({
-    success: false,
-    error: error.message || 'Internal server error'
+  console.log('📨 Webhook event:', event.type);
+
+  switch (event.type) {
+    case 'checkout.session.completed':
+      await handleCheckoutCompleted(event.data.object);
+      break;
+    case 'payment_intent.succeeded':
+      console.log('✅ Payment succeeded:', event.data.object.id);
+      break;
+    case 'payment_intent.payment_failed':
+      console.error('❌ Payment failed:', event.data.object.id);
+      break;
+    default:
+      console.log('ℹ️ Unhandled event:', event.type);
+  }
+
+  return { received: true };
+}
+
+async function handleCheckoutCompleted(session) {
+  const { client_reference_id: userId, metadata } = session;
+
+  console.log('✅ Checkout completed:', {
+    userId,
+    bidId: metadata?.bidId,
+    amount: session.amount_total / 100,
   });
-});
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`
-╔════════════════════════════════════════╗
-║   BidSmith ASF API Server Running    ║
-╚════════════════════════════════════════╝
+  // TODO: Update Firestore with subscription status
+  // TODO: Send confirmation email
+}
 
-✅ Port: ${PORT}
-✅ Environment: ${process.env.NODE_ENV || 'development'}
+/**
+ * Get payment details with receipt
+ */
+async function getPaymentDetails(sessionId) {
+  assertStripeConfigured();
 
-📍 Endpoints:
-   GET  /api/health
-   POST /api/upload
-   POST /api/analyze
-   POST /api/generate
-   POST /api/signature
-   GET  /api/signature/:bidId
-   POST /api/stripe/checkout
-   GET  /api/stripe/verify/:sessionId
-   POST /api/stripe/webhook
-   POST /api/pdf/generate
+  try {
+    const session = await stripeClient.checkout.sessions.retrieve(sessionId, {
+      expand: ['payment_intent', 'line_items'],
+    });
 
-🔒 Configured:
-   Stripe: ${!!process.env.STRIPE_SECRET_KEY ? '✓' : '✗'}
-   Firebase: ${!!process.env.FIREBASE_ADMIN_PROJECT_ID ? '✓' : '✗'}
-   OpenAI: ${!!process.env.OPENAI_API_KEY ? '✓' : '✗'}
-`);
-});
+    return {
+      id: session.id,
+      amount: session.amount_total / 100,
+      currency: session.currency.toUpperCase(),
+      status: session.payment_status,
+      email: session.customer_email,
+      createdAt: new Date(session.created * 1000).toISOString(),
+      receiptUrl: session.payment_intent?.charges?.data[0]?.receipt_url,
+    };
+  } catch (error) {
+    throw new Error('Payment not found');
+  }
+}
 
-module.exports = app;
+module.exports = {
+  createCheckoutSession,
+  verifyCheckoutSession,
+  handleWebhook,
+  getPaymentDetails,
+};

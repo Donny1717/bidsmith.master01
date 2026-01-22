@@ -1,3 +1,8 @@
+/**
+ * BidSmith ASF - Stripe Payment Integration
+ * Production-ready payment processing for £1,490
+ */
+
 const Stripe = require('stripe');
 
 const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_BIDSMITH_FULL;
@@ -12,23 +17,23 @@ function assertStripeConfigured() {
 }
 
 function getSuccessUrl() {
-  const base = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const base = process.env.FRONTEND_URL || 'http://localhost:3001';
   return `${base}/payment/success`;
 }
 
 function getCancelUrl() {
-  const base = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const base = process.env.FRONTEND_URL || 'http://localhost:3001';
   return `${base}/payment/cancel`;
 }
 
 /**
- * Create Stripe Checkout Session for £1,490 payment
+ * Create Stripe Checkout Session for £1,490
  */
 async function createCheckoutSession({ userId, userEmail, bidId }) {
   assertStripeConfigured();
 
   if (!STRIPE_PRICE_ID) {
-    throw new Error('STRIPE_PRICE_ID not configured in environment');
+    throw new Error('STRIPE_PRICE_ID not configured');
   }
 
   try {
@@ -38,8 +43,8 @@ async function createCheckoutSession({ userId, userEmail, bidId }) {
       line_items: [
         {
           price: STRIPE_PRICE_ID,
-          quantity: 1
-        }
+          quantity: 1,
+        },
       ],
       success_url: getSuccessUrl() + `?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: getCancelUrl(),
@@ -49,16 +54,16 @@ async function createCheckoutSession({ userId, userEmail, bidId }) {
         userId,
         bidId,
         product: 'BidSmith ASF Full Access',
-        purchaseDate: new Date().toISOString()
+        purchaseDate: new Date().toISOString(),
       },
-      allow_promotion_codes: true
+      allow_promotion_codes: true,
     });
 
     console.log('✅ Checkout session created:', session.id);
 
     return {
       sessionId: session.id,
-      url: session.url
+      url: session.url,
     };
   } catch (error) {
     console.error('❌ Stripe checkout error:', error);
@@ -82,7 +87,7 @@ async function verifyCheckoutSession(sessionId) {
       amountTotal: session.amount_total / 100,
       currency: session.currency.toUpperCase(),
       metadata: session.metadata,
-      isSuccessful: session.payment_status === 'paid'
+      isSuccessful: session.payment_status === 'paid',
     };
   } catch (error) {
     console.error('❌ Verification error:', error);
@@ -105,7 +110,11 @@ async function handleWebhook(req) {
   let event;
 
   try {
-    event = stripeClient.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET);
+    event = stripeClient.webhooks.constructEvent(
+      req.body,
+      sig,
+      STRIPE_WEBHOOK_SECRET
+    );
   } catch (err) {
     console.error('⚠️ Webhook signature failed:', err.message);
     throw new Error('Invalid webhook signature');
@@ -136,7 +145,7 @@ async function handleCheckoutCompleted(session) {
   console.log('✅ Checkout completed:', {
     userId,
     bidId: metadata?.bidId,
-    amount: session.amount_total / 100
+    amount: session.amount_total / 100,
   });
 
   // TODO: Update Firestore with subscription status
@@ -151,7 +160,7 @@ async function getPaymentDetails(sessionId) {
 
   try {
     const session = await stripeClient.checkout.sessions.retrieve(sessionId, {
-      expand: ['payment_intent', 'line_items']
+      expand: ['payment_intent', 'line_items'],
     });
 
     return {
@@ -161,7 +170,7 @@ async function getPaymentDetails(sessionId) {
       status: session.payment_status,
       email: session.customer_email,
       createdAt: new Date(session.created * 1000).toISOString(),
-      receiptUrl: session.payment_intent?.charges?.data[0]?.receipt_url
+      receiptUrl: session.payment_intent?.charges?.data[0]?.receipt_url,
     };
   } catch (error) {
     throw new Error('Payment not found');
@@ -172,5 +181,5 @@ module.exports = {
   createCheckoutSession,
   verifyCheckoutSession,
   handleWebhook,
-  getPaymentDetails
+  getPaymentDetails,
 };

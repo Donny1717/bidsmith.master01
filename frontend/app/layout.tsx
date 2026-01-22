@@ -5,13 +5,15 @@ import Header from "@/components/header";
 import Footer from "@/components/footer";
 
 const geistSans = Geist({
-  variable: "--font-geist-sans",
   subsets: ["latin"],
+  variable: "--font-geist-sans",
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
   subsets: ["latin"],
+  variable: "--font-geist-mono",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -21,16 +23,16 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-neutral-50`}
       >
         <Header />
-        <main className="min-h-screen bg-neutral-50">
+        <main className="min-h-screen">
           <div className="mx-auto max-w-6xl px-6 py-10">{children}</div>
         </main>
         <Footer />
@@ -38,3 +40,4 @@ export default function RootLayout({
     </html>
   );
 }
+

@@ -1,0 +1,12 @@
+steps:
+  - name: gcr.io/cloud-builders/npm
+    dir: frontend
+    args: ["ci"]
+  - name: gcr.io/cloud-builders/npm
+    dir: frontend
+    args: ["run", "build"]
+  - name: gcr.io/cloud-builders/npm
+    dir: backend
+    args: ["ci"]
+options:
+  defaultLogsBucketBehavior: REGIONAL_USER_OWNED_BUCKET

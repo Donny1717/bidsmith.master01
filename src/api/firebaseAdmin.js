@@ -1,42 +1,57 @@
-const admin = require('firebase-admin');
+const admin = require("firebase-admin");
 
-function validateEnv() {
-  const missing = [];
-  if (!process.env.FIREBASE_PROJECT_ID) missing.push('FIREBASE_PROJECT_ID');
-  if (!process.env.FIREBASE_CLIENT_EMAIL) missing.push('FIREBASE_CLIENT_EMAIL');
-  if (!process.env.FIREBASE_PRIVATE_KEY) missing.push('FIREBASE_PRIVATE_KEY');
+let firebaseApp = null;
 
-  if (missing.length) {
-    throw new Error(
-      `Missing Firebase env vars: ${missing.join(
-        ', '
-      )}. Ensure FIREBASE_PRIVATE_KEY is provided as one line with \\n escapes.`
-    );
-  }
+function getMissingEnv() {
+  const required = [
+    "FIREBASE_PROJECT_ID",
+    "FIREBASE_CLIENT_EMAIL",
+    "FIREBASE_PRIVATE_KEY",
+  ];
+  return required.filter((k) => !process.env[k]);
 }
 
 function initFirebaseAdmin() {
-  if (admin.apps.length) {
-    return admin.app();
+  // already initialized
+  if (firebaseApp) {
+    return firebaseApp;
   }
 
-  validateEnv();
+  // already initialized elsewhere (hot reload / multiple imports)
+  if (admin.apps && admin.apps.length) {
+    firebaseApp = admin.app();
+    return firebaseApp;
+  }
 
-  return admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
-    })
-  });
-}
+  const missing = getMissingEnv();
 
-function getDb() {
-  return admin.firestore(initFirebaseAdmin());
+  // 🚫 DEV SAFE MODE: do NOT crash server
+  if (missing.length) {
+    console.warn(
+      "[firebaseAdmin] Firebase env missing, admin disabled:",
+      missing.join(", ")
+    );
+    return null;
+  }
+
+  try {
+    firebaseApp = admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+      }),
+    });
+
+    console.log("[firebaseAdmin] Firebase Admin initialized");
+    return firebaseApp;
+  } catch (err) {
+    console.error("[firebaseAdmin] Init failed:", err.message);
+    return null;
+  }
 }
 
 module.exports = {
   admin,
   initFirebaseAdmin,
-  getDb
 };
