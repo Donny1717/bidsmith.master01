@@ -1,3 +1,10 @@
 {
-    "chatgpt.openOnStartup": true
+    "chatgpt.openOnStartup": true,
+    "chat.mcp.serverSampling": {
+        "bidsmith.master01/.vscode/mcp.json: io.github.github/github-mcp-server": {
+            "allowedModels": [
+                "copilot/gpt-4.1"
+            ]
+        }
+    }
 }
