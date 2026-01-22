@@ -3,17 +3,15 @@ const cors = require('cors');
 const multer = require('multer');
 const dotenv = require('dotenv');
 
-dotenv.config({ path: '.env.local' });
-
 const { createCheckoutSession, verifyCheckoutSession, handleWebhook, getPaymentDetails } = require('./stripe');
-
 const { saveSignature, getSignature, deleteSignature } = require('./signature');
 const { initFirebaseAdmin } = require('./firebaseAdmin');
+
+dotenv.config({ path: '.env.local' });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CORS
 app.use(
   cors({
     origin: process.env.FRONTEND_URL || 'http://localhost:5173',
@@ -21,13 +19,10 @@ app.use(
   })
 );
 
-// File upload configuration
 const storage = multer.memoryStorage();
 const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 50 * 1024 * 1024 // 50MB for tender documents
-  },
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowedMimes = [
       'application/pdf',
@@ -45,26 +40,20 @@ const upload = multer({
   }
 });
 
-// ==========================================
-// STRIPE WEBHOOK (MUST BE BEFORE express.json)
-// ==========================================
+// Stripe webhook must use raw body before JSON parser
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
     const result = await handleWebhook(req);
     res.status(200).json(result);
   } catch (error) {
-    console.error('❌ Webhook error:', error.message);
+    console.error('Webhook error:', error.message);
     res.status(400).json({ error: error.message });
   }
 });
 
-// JSON body parser for other routes
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ==========================================
-// HEALTH CHECK
-// ==========================================
 app.get('/api/health', (req, res) => {
   let firebaseOk = false;
   let firebaseMessage = 'Not configured';
@@ -78,6 +67,7 @@ app.get('/api/health', (req, res) => {
   }
 
   const openaiOk = !!process.env.OPENAI_API_KEY;
+
   const status = firebaseOk && openaiOk ? 'ok' : 'degraded';
 
   res.json({
@@ -90,16 +80,6 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// ==========================================
-// TENDER UPLOAD & ANALYSIS
-// ==========================================
-
-/**
- * Upload tender documents
- * POST /api/upload
- * Files: tender PDFs/Word docs
- * Body: companyName, companyNumber, projects[], accreditations[]
- */
 app.post('/api/upload', upload.array('files', 10), async (req, res) => {
   try {
     const files = req.files;
@@ -112,15 +92,12 @@ app.post('/api/upload', upload.array('files', 10), async (req, res) => {
       });
     }
 
-    console.log(`📤 Uploaded ${files.length} files`);
-    console.log('Company:', companyDetails.companyName);
+    console.log(`Uploaded ${files.length} files`);
+    if (companyDetails?.companyName) {
+      console.log('Company:', companyDetails.companyName);
+    }
 
-    // Generate analysis ID
     const analysisId = `analysis_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    // TODO: Process PDFs with pdf-parse
-    // TODO: Extract questions and criteria
-    // TODO: Store in Firestore
 
     res.json({
       success: true,
@@ -134,7 +111,7 @@ app.post('/api/upload', upload.array('files', 10), async (req, res) => {
       }))
     });
   } catch (error) {
-    console.error('❌ Upload error:', error);
+    console.error('Upload error:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -142,11 +119,6 @@ app.post('/api/upload', upload.array('files', 10), async (req, res) => {
   }
 });
 
-/**
- * Analyze tender documents
- * POST /api/analyze
- * Body: { analysisId }
- */
 app.post('/api/analyze', async (req, res) => {
   try {
     const { analysisId } = req.body;
@@ -158,13 +130,8 @@ app.post('/api/analyze', async (req, res) => {
       });
     }
 
-    console.log(`🔍 Analyzing tender: ${analysisId}`);
+    console.log(`Analyzing tender: ${analysisId}`);
 
-    // TODO: Use OpenAI to analyze tender
-    // TODO: Extract London-specific requirements
-    // TODO: Calculate compliance score
-
-    // Mock response for now
     res.json({
       success: true,
       analysisId,
@@ -192,7 +159,7 @@ app.post('/api/analyze', async (req, res) => {
       ]
     });
   } catch (error) {
-    console.error('❌ Analysis error:', error);
+    console.error('Analysis error:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -200,14 +167,9 @@ app.post('/api/analyze', async (req, res) => {
   }
 });
 
-/**
- * Generate bid response using OpenAI
- * POST /api/generate
- * Body: { analysisId, questionId, companyDetails, previousProjects }
- */
 app.post('/api/generate', async (req, res) => {
   try {
-    const { analysisId, questionId, companyDetails } = req.body;
+    const { analysisId, questionId } = req.body;
 
     if (!analysisId || !questionId) {
       return res.status(400).json({
@@ -216,13 +178,8 @@ app.post('/api/generate', async (req, res) => {
       });
     }
 
-    console.log(`🤖 Generating response for ${questionId}`);
+    console.log(`Generating response for ${questionId}`);
 
-    // TODO: Call OpenAI with London-specific prompts
-    // TODO: Include Social Value Model requirements
-    // TODO: Generate 6-part structure
-
-    // Mock response
     res.json({
       success: true,
       questionId,
@@ -232,21 +189,21 @@ Our approach to ${questionId} combines proven methodologies with London-specific
 
 ## Methodology
 
-1. **Planning Phase**
+1. Planning Phase
    - Construction Logistics Plan aligned with TfL requirements
    - NRMM Stage V compliance for all equipment
    - ULEZ-compliant vehicle fleet
 
-2. **Execution Phase**
+2. Execution Phase
    - 8 apprenticeships (exceeds 5 minimum requirement)
    - 60% workforce from Westminster
-   - £170,000 to local SMEs (20% of contract value)
+   - GBP 170,000 to local SMEs (20% of contract value)
 
 ## Evidence
 
 Previous projects:
-- Westminster Bridge Refurbishment (2024) - £2.1M
-- Camden Street Improvement (2023) - £1.5M
+- Westminster Bridge Refurbishment (2024) - GBP 2.1M
+- Camden Street Improvement (2023) - GBP 1.5M
 
 ## Risk Management
 
@@ -263,9 +220,9 @@ Previous projects:
 
 ## Compliance
 
-✓ Section 106 obligations met (25+ points)
-✓ ISO 9001, 14001, 45001 certified
-✓ Constructionline Gold member`,
+Section 106 obligations met (25+ points)
+ISO 9001, 14001, 45001 certified
+Constructionline Gold member`,
       wordCount: 247,
       coverageScore: 92,
       sections: {
@@ -278,7 +235,7 @@ Previous projects:
       }
     });
   } catch (error) {
-    console.error('❌ Generation error:', error);
+    console.error('Generation error:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -286,15 +243,6 @@ Previous projects:
   }
 });
 
-// ==========================================
-// ELECTRONIC SIGNATURE
-// ==========================================
-
-/**
- * Save signature (canvas drawing or uploaded image)
- * POST /api/signature
- * Body: { userId, bidId, signatureData (base64), signatoryName, signatoryPosition }
- */
 app.post('/api/signature', async (req, res) => {
   try {
     const { userId, bidId, signatureData, signatoryName, signatoryPosition } = req.body;
@@ -309,7 +257,7 @@ app.post('/api/signature', async (req, res) => {
     const signature = await saveSignature({
       userId,
       bidId,
-      signatureData, // base64 PNG
+      signatureData,
       signatoryName,
       signatoryPosition: signatoryPosition || 'Director',
       timestamp: new Date().toISOString(),
@@ -328,7 +276,7 @@ app.post('/api/signature', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ Signature error:', error);
+    console.error('Signature error:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -336,10 +284,6 @@ app.post('/api/signature', async (req, res) => {
   }
 });
 
-/**
- * Get signature
- * GET /api/signature/:bidId
- */
 app.get('/api/signature/:bidId', async (req, res) => {
   try {
     const { bidId } = req.params;
@@ -357,7 +301,7 @@ app.get('/api/signature/:bidId', async (req, res) => {
       signature
     });
   } catch (error) {
-    console.error('❌ Get signature error:', error);
+    console.error('Get signature error:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -365,10 +309,6 @@ app.get('/api/signature/:bidId', async (req, res) => {
   }
 });
 
-/**
- * Delete signature
- * DELETE /api/signature/:bidId
- */
 app.delete('/api/signature/:bidId', async (req, res) => {
   try {
     const { bidId } = req.params;
@@ -379,7 +319,7 @@ app.delete('/api/signature/:bidId', async (req, res) => {
       message: 'Signature deleted'
     });
   } catch (error) {
-    console.error('❌ Delete signature error:', error);
+    console.error('Delete signature error:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -387,15 +327,6 @@ app.delete('/api/signature/:bidId', async (req, res) => {
   }
 });
 
-// ==========================================
-// STRIPE PAYMENT
-// ==========================================
-
-/**
- * Create Stripe Checkout Session
- * POST /api/stripe/checkout
- * Body: { userId, userEmail, bidId }
- */
 app.post('/api/stripe/checkout', async (req, res) => {
   try {
     const { userId, userEmail, bidId } = req.body;
@@ -416,10 +347,10 @@ app.post('/api/stripe/checkout', async (req, res) => {
     res.json({
       success: true,
       sessionId: session.sessionId,
-      url: session.url // Redirect user here
+      url: session.url
     });
   } catch (error) {
-    console.error('❌ Checkout error:', error);
+    console.error('Checkout error:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -427,10 +358,6 @@ app.post('/api/stripe/checkout', async (req, res) => {
   }
 });
 
-/**
- * Verify payment after Stripe redirect
- * GET /api/stripe/verify/:sessionId
- */
 app.get('/api/stripe/verify/:sessionId', async (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -441,7 +368,7 @@ app.get('/api/stripe/verify/:sessionId', async (req, res) => {
       payment
     });
   } catch (error) {
-    console.error('❌ Verification error:', error);
+    console.error('Verification error:', error);
     res.status(400).json({
       success: false,
       error: error.message
@@ -449,10 +376,6 @@ app.get('/api/stripe/verify/:sessionId', async (req, res) => {
   }
 });
 
-/**
- * Get payment receipt/details
- * GET /api/payment/:sessionId
- */
 app.get('/api/payment/:sessionId', async (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -463,7 +386,7 @@ app.get('/api/payment/:sessionId', async (req, res) => {
       payment
     });
   } catch (error) {
-    console.error('❌ Payment retrieval error:', error);
+    console.error('Payment retrieval error:', error);
     res.status(404).json({
       success: false,
       error: 'Payment not found'
@@ -471,15 +394,6 @@ app.get('/api/payment/:sessionId', async (req, res) => {
   }
 });
 
-// ==========================================
-// PDF GENERATION & DOWNLOAD
-// ==========================================
-
-/**
- * Generate final bid PDF with signature
- * POST /api/pdf/generate
- * Body: { bidId, userId }
- */
 app.post('/api/pdf/generate', async (req, res) => {
   try {
     const { bidId, userId } = req.body;
@@ -491,13 +405,7 @@ app.post('/api/pdf/generate', async (req, res) => {
       });
     }
 
-    console.log(`📄 Generating PDF for bid: ${bidId}`);
-
-    // TODO: Fetch bid content from Firestore
-    // TODO: Fetch signature
-    // TODO: Generate PDF with puppeteer
-    // TODO: Upload to Firebase Storage
-    // TODO: Return download URL
+    console.log(`Generating PDF for bid: ${bidId}`);
 
     res.json({
       success: true,
@@ -506,7 +414,7 @@ app.post('/api/pdf/generate', async (req, res) => {
       size: '8.4 MB'
     });
   } catch (error) {
-    console.error('❌ PDF generation error:', error);
+    console.error('PDF generation error:', error);
     res.status(500).json({
       success: false,
       error: error.message
@@ -514,26 +422,24 @@ app.post('/api/pdf/generate', async (req, res) => {
   }
 });
 
-// Error handling middleware
 app.use((error, req, res, next) => {
-  console.error('❌ Server error:', error);
+  console.error('Server error:', error);
   res.status(500).json({
     success: false,
     error: error.message || 'Internal server error'
   });
 });
 
-// Start server
 app.listen(PORT, () => {
   console.log(`
-╔════════════════════════════════════════╗
-║   BidSmith ASF API Server Running    ║
-╚════════════════════════════════════════╝
+========================================
+   BidSmith ASF API Server Running
+========================================
 
-✅ Port: ${PORT}
-✅ Environment: ${process.env.NODE_ENV || 'development'}
+Port: ${PORT}
+Environment: ${process.env.NODE_ENV || 'development'}
 
-📍 Endpoints:
+Endpoints:
    GET  /api/health
    POST /api/upload
    POST /api/analyze
@@ -545,10 +451,10 @@ app.listen(PORT, () => {
    POST /api/stripe/webhook
    POST /api/pdf/generate
 
-🔒 Configured:
-   Stripe: ${!!process.env.STRIPE_SECRET_KEY ? '✓' : '✗'}
-   Firebase: ${!!process.env.FIREBASE_ADMIN_PROJECT_ID ? '✓' : '✗'}
-   OpenAI: ${!!process.env.OPENAI_API_KEY ? '✓' : '✗'}
+Configured:
+   Stripe: ${process.env.STRIPE_SECRET_KEY ? 'yes' : 'no'}
+   Firebase: ${process.env.FIREBASE_ADMIN_PROJECT_ID ? 'yes' : 'no'}
+   OpenAI: ${process.env.OPENAI_API_KEY ? 'yes' : 'no'}
 `);
 });
 

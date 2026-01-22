@@ -1,64 +1,44 @@
-<<<<<<< HEAD
-# BidSmith - Premium AI-Powered Proposal Generator
+# BidSmith ASF
 
-**BidSmith** is a sophisticated expert system designed to generate winning proposals for UK construction and NHS tenders in London.
+Bid Intelligence Platform for London Construction Tenders
 
-## 🎯 Core Capabilities
-
-- **Regulatory Compliance**: Full understanding of UK Construction Law, CDM 2015, and NHS Procurement Standards
-- **Intelligent Analysis**: Deep analysis of tender requirements with London-specific considerations
-- **Expert Strategies**: Implements proven winning proposal strategies
-- **Complete Documentation**: Automatically includes all mandatory documentation elements
-
-## 🏗️ Architecture
-
+## Quick Start
 ```
-bidsmith/
-├── src/
-│   ├── knowledge-base/        # Regulatory knowledge & requirements
-│   ├── analyzers/             # Tender analysis engines
-│   ├── generators/            # Proposal generation engines
-│   ├── templates/             # Proposal templates & structures
-│   ├── validators/            # Compliance validation
-│   └── api/                   # API interface
-├── config/                    # Configuration files
-└── tests/                     # Test suites
+# 1. Install dependencies
+chmod +x install.sh
+./install.sh
+
+# 2. Setup environment variables
+cp backend/.env.example backend/.env.local
+cp frontend/.env.example frontend/.env.local
+# Edit both .env.local files with your API keys
+
+# 3. Run both servers
+chmod +x start.sh
+./start.sh
 ```
 
-## 🚀 Quick Start
+## Project Structure
 
-```bash
-npm install
-npm start
+- backend/ - Express API server
+- frontend/ - Next.js 14 web application
+
+## Development
+```
+# Backend only
+cd backend
+npm run dev
+
+# Frontend only
+cd frontend
+npm run dev
 ```
 
-## 📋 Features
+## Environment Variables
 
-### Regulatory Knowledge Base
-- CDM 2015 (Construction Design and Management Regulations)
-- UK Construction Law & Regulations
-- NHS Procurement Standards
-- London-specific requirements
-- Health & Safety Executive (HSE) compliance
+See `.env.example` in both `backend/` and `frontend/` directories.
 
-### Proposal Generation
-- Automated compliance checking
-- Strategic response crafting
-- Template-based structure
-- PDF generation with professional formatting
+## Documentation
 
-## 📚 Documentation
-
-See `/docs` for detailed documentation on:
-- Regulatory requirements
-- Proposal strategies
-- API usage
-- Configuration options
-
-## ⚖️ License
-
-MIT
-=======
-# bidsmith.master01
-BidSmith AI 
->>>>>>> 11f85c312f7406215a952de24dd10215a4130e26
+- Backend API: `backend/README.md`
+- Frontend: `frontend/README.md`

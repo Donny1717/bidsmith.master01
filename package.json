@@ -4,10 +4,9 @@
   "description": "BidSmith ASF - Bid Intelligence Platform",
   "main": "src/api/server.js",
   "scripts": {
+    "dev": "node src/api/server.js",
     "start": "node src/api/server.js",
-    "dev": "nodemon src/api/server.js",
-    "test": "node test-stripe.js",
-    "lint": "eslint src/**/*.js"
+    "test": "node test-stripe.js"
   },
   "keywords": [
     "tender",
@@ -21,25 +20,22 @@
   "author": "BidSmith",
   "license": "MIT",
   "dependencies": {
+    "@stripe/react-stripe-js": "^5.4.1",
+    "@stripe/stripe-js": "^8.6.1",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "express-rate-limit": "^7.1.5",
     "firebase-admin": "^12.0.0",
-    "firebase-functions": "^4.9.0",
-    "js-yaml": "^4.1.0",
+    "lucide-react": "^0.562.0",
     "mammoth": "^1.6.0",
     "multer": "^1.4.5-lts.1",
-    "nodemailer": "^6.9.13",
     "openai": "^4.20.1",
-    "pdf-lib": "^1.17.1",
     "pdf-parse": "^1.1.1",
     "puppeteer": "^21.5.0",
-    "stripe": "^14.0.0",
-    "winston": "^3.11.0"
+    "react-signature-canvas": "^1.1.0-alpha.2",
+    "stripe": "^14.0.0"
   },
   "devDependencies": {
-    "eslint": "^8.54.0",
     "nodemon": "^3.0.2"
   },
   "engines": {

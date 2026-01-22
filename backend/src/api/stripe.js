@@ -1,6 +1,7 @@
 const Stripe = require('stripe');
+const { updateSubscriptionStatus } = require('./firebase');
 
-const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_BIDSMITH_FULL;
+const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_BIDSMITH_FULL || process.env.STRIPE_PRICE_ID;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 const stripeClient = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
@@ -21,9 +22,6 @@ function getCancelUrl() {
   return `${base}/payment/cancel`;
 }
 
-/**
- * Create Stripe Checkout Session for £1,490 payment
- */
 async function createCheckoutSession({ userId, userEmail, bidId }) {
   assertStripeConfigured();
 
@@ -41,7 +39,7 @@ async function createCheckoutSession({ userId, userEmail, bidId }) {
           quantity: 1
         }
       ],
-      success_url: getSuccessUrl() + `?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${getSuccessUrl()}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: getCancelUrl(),
       client_reference_id: userId,
       customer_email: userEmail,
@@ -54,21 +52,18 @@ async function createCheckoutSession({ userId, userEmail, bidId }) {
       allow_promotion_codes: true
     });
 
-    console.log('✅ Checkout session created:', session.id);
+    console.log('Checkout session created:', session.id);
 
     return {
       sessionId: session.id,
       url: session.url
     };
   } catch (error) {
-    console.error('❌ Stripe checkout error:', error);
+    console.error('Stripe checkout error:', error);
     throw new Error(`Failed to create checkout: ${error.message}`);
   }
 }
 
-/**
- * Verify checkout session
- */
 async function verifyCheckoutSession(sessionId) {
   assertStripeConfigured();
 
@@ -80,19 +75,16 @@ async function verifyCheckoutSession(sessionId) {
       paymentStatus: session.payment_status,
       customerEmail: session.customer_email,
       amountTotal: session.amount_total / 100,
-      currency: session.currency.toUpperCase(),
+      currency: (session.currency || 'gbp').toUpperCase(),
       metadata: session.metadata,
       isSuccessful: session.payment_status === 'paid'
     };
   } catch (error) {
-    console.error('❌ Verification error:', error);
+    console.error('Verification error:', error);
     throw new Error('Invalid session ID');
   }
 }
 
-/**
- * Handle Stripe webhooks
- */
 async function handleWebhook(req) {
   assertStripeConfigured();
 
@@ -107,24 +99,24 @@ async function handleWebhook(req) {
   try {
     event = stripeClient.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET);
   } catch (err) {
-    console.error('⚠️ Webhook signature failed:', err.message);
+    console.error('Webhook signature failed:', err.message);
     throw new Error('Invalid webhook signature');
   }
 
-  console.log('📨 Webhook event:', event.type);
+  console.log('Webhook event:', event.type);
 
   switch (event.type) {
     case 'checkout.session.completed':
       await handleCheckoutCompleted(event.data.object);
       break;
     case 'payment_intent.succeeded':
-      console.log('✅ Payment succeeded:', event.data.object.id);
+      console.log('Payment succeeded:', event.data.object.id);
       break;
     case 'payment_intent.payment_failed':
-      console.error('❌ Payment failed:', event.data.object.id);
+      console.error('Payment failed:', event.data.object.id);
       break;
     default:
-      console.log('ℹ️ Unhandled event:', event.type);
+      console.log('Unhandled event:', event.type);
   }
 
   return { received: true };
@@ -133,19 +125,28 @@ async function handleWebhook(req) {
 async function handleCheckoutCompleted(session) {
   const { client_reference_id: userId, metadata } = session;
 
-  console.log('✅ Checkout completed:', {
+  console.log('Checkout completed:', {
     userId,
     bidId: metadata?.bidId,
     amount: session.amount_total / 100
   });
 
-  // TODO: Update Firestore with subscription status
-  // TODO: Send confirmation email
+  try {
+    if (userId) {
+      await updateSubscriptionStatus(userId, {
+        status: 'active',
+        plan: 'full_access',
+        amount: session.amount_total / 100,
+        currency: (session.currency || 'gbp').toUpperCase(),
+        stripeSessionId: session.id,
+        stripeCustomerId: session.customer
+      });
+    }
+  } catch (err) {
+    console.error('Firestore update error:', err.message);
+  }
 }
 
-/**
- * Get payment details with receipt
- */
 async function getPaymentDetails(sessionId) {
   assertStripeConfigured();
 
@@ -157,7 +158,7 @@ async function getPaymentDetails(sessionId) {
     return {
       id: session.id,
       amount: session.amount_total / 100,
-      currency: session.currency.toUpperCase(),
+      currency: (session.currency || 'gbp').toUpperCase(),
       status: session.payment_status,
       email: session.customer_email,
       createdAt: new Date(session.created * 1000).toISOString(),

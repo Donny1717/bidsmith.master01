@@ -1,13 +1,8 @@
 const { admin, getDb, initFirebaseAdmin } = require('./firebaseAdmin');
 const crypto = require('crypto');
-
 initFirebaseAdmin();
 const db = getDb();
 
-/**
- * Save electronic signature
- * Compliant with UK Electronic Communications Act 2000
- */
 async function saveSignature(signatureData) {
   const {
     userId,
@@ -20,7 +15,7 @@ async function saveSignature(signatureData) {
     userAgent
   } = signatureData;
 
-  if (!base64Signature.startsWith('data:image/png;base64,')) {
+  if (!base64Signature?.startsWith('data:image/png;base64,')) {
     throw new Error('Signature must be PNG image in base64 format');
   }
 
@@ -50,15 +45,20 @@ async function saveSignature(signatureData) {
   try {
     await db.collection('signatures').doc(signatureId).set(signature);
 
-    // Also link to bid document
-    await db.collection('bids').doc(bidId).update({
-      signatureId,
-      signedAt: timestamp,
-      signedBy: signatoryName,
-      signatureStatus: 'signed'
-    });
+    await db
+      .collection('bids')
+      .doc(bidId)
+      .set(
+        {
+          signatureId,
+          signedAt: timestamp,
+          signedBy: signatoryName,
+          signatureStatus: 'signed'
+        },
+        { merge: true }
+      );
 
-    console.log('✅ Signature saved:', signatureId);
+    console.log('Signature saved:', signatureId);
 
     return {
       id: signatureId,
@@ -68,14 +68,11 @@ async function saveSignature(signatureData) {
       auditHash
     };
   } catch (error) {
-    console.error('❌ Signature save error:', error);
+    console.error('Signature save error:', error);
     throw new Error(`Failed to save signature: ${error.message}`);
   }
 }
 
-/**
- * Retrieve signature by bid ID
- */
 async function getSignature(bidId) {
   try {
     const snapshot = await db.collection('signatures').where('bidId', '==', bidId).limit(1).get();
@@ -90,14 +87,11 @@ async function getSignature(bidId) {
       ...doc.data()
     };
   } catch (error) {
-    console.error('❌ Get signature error:', error);
+    console.error('Get signature error:', error);
     throw new Error('Failed to retrieve signature');
   }
 }
 
-/**
- * Delete signature
- */
 async function deleteSignature(bidId) {
   try {
     const signature = await getSignature(bidId);
@@ -108,21 +102,24 @@ async function deleteSignature(bidId) {
 
     await db.collection('signatures').doc(signature.id).delete();
 
-    await db.collection('bids').doc(bidId).update({
-      signatureId: null,
-      signatureStatus: 'unsigned'
-    });
+    await db
+      .collection('bids')
+      .doc(bidId)
+      .set(
+        {
+          signatureId: null,
+          signatureStatus: 'unsigned'
+        },
+        { merge: true }
+      );
 
-    console.log('✅ Signature deleted:', signature.id);
+    console.log('Signature deleted:', signature.id);
   } catch (error) {
-    console.error('❌ Delete signature error:', error);
+    console.error('Delete signature error:', error);
     throw new Error('Failed to delete signature');
   }
 }
 
-/**
- * Verify signature integrity
- */
 async function verifySignature(signatureId) {
   try {
     const doc = await db.collection('signatures').doc(signatureId).get();
@@ -149,7 +146,7 @@ async function verifySignature(signatureId) {
       ipAddress: signature.ipAddress
     };
   } catch (error) {
-    console.error('❌ Verification error:', error);
+    console.error('Verification error:', error);
     throw new Error('Failed to verify signature');
   }
 }
