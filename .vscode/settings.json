@@ -3,7 +3,7 @@
     "chat.mcp.serverSampling": {
         "bidsmith.master01/.vscode/mcp.json: io.github.github/github-mcp-server": {
             "allowedModels": [
-                "copilot/gpt-4.1"
+                "copilot/oswe-vscode-prime"
             ]
         }
     }
